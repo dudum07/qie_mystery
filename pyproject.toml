@@ -1,0 +1,10 @@
+[project]
+name = "blood-quantum-information-mystery"
+version = "0.1.0"
+description = "XX대학교 양자정보공학과를 배경으로 한 콘솔 추리 게임"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+package = false
