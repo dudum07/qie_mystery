@@ -151,9 +151,9 @@ def stream_gemini_reply(profile, clues, history, question):
     if not api_key:
         raise GeminiDialogueError("GEMINI_API_KEY가 설정되지 않았습니다. README의 키 설정 방법을 확인하세요.")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
     if not model:
-        model = "gemini-2.5-flash"
+        model = "gemini-3.8-flash"
 
     clue_text = "\n".join(f"- {clue['name']}: {clue['desc']}" for clue in clues)
     if not clue_text:
@@ -190,10 +190,20 @@ def stream_gemini_reply(profile, clues, history, question):
             if chunk.text:
                 yield chunk.text
     except errors.APIError as exc:
-        status = f"HTTP {exc.code}" if exc.code else "요청 실패"
-        raise GeminiDialogueError(
-            f"Gemini API {status}입니다. API 키, 모델명 및 네트워크 연결을 확인하세요."
-        ) from None
+        if exc.code == 402:
+            message = "Gemini API 크레딧이 소진되었습니다. Google AI Studio의 프로젝트 결제 및 크레딧을 확인하세요."
+        elif exc.code == 401 or exc.code == 403:
+            message = "Gemini API 인증에 실패했습니다. API 키와 프로젝트 권한을 확인하세요."
+        elif exc.code == 404:
+            message = f"Gemini 모델 '{model}'을(를) 사용할 수 없습니다. GEMINI_MODEL 설정을 확인하세요."
+        elif exc.code == 429:
+            message = "Gemini API 사용 한도에 도달했습니다. 잠시 후 다시 시도하거나 사용량 한도를 확인하세요."
+        elif exc.code and exc.code >= 500:
+            message = "Gemini API 서버에 일시적인 오류가 발생했습니다. 잠시 후 다시 시도하세요."
+        else:
+            status = f"HTTP {exc.code}" if exc.code else "요청 실패"
+            message = f"Gemini API {status}입니다. 모델 설정과 API 요청을 확인하세요."
+        raise GeminiDialogueError(message) from None
     except (TimeoutError, OSError):
         raise GeminiDialogueError("Gemini API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from None
     finally:

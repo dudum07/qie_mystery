@@ -45,7 +45,7 @@ Gemini 대화 기능에는 `google-genai`와 `.env` 파일 로드를 위한 `pyt
 
 Gemini API를 사용해 심문실에서 용의자에게 자유롭게 질문할 수 있습니다. 기존 선택지형 질문과 증거 추궁도 그대로 사용할 수 있습니다. API는 공개된 인물 정보와 이미 확보한 단서를 바탕으로 대화를 생성하며, 단서 획득·질문 잠금·증거 추궁·범인 판정·최종 보고는 게임 코드가 결정합니다. API 응답만으로 증거나 정답이 결정되지는 않습니다.
 
-사용 모델 기본값은 `gemini-2.5-flash`이며, `GEMINI_MODEL` 환경 변수로 변경할 수 있습니다. 질문은 500자까지 입력할 수 있습니다. 응답은 스트리밍으로 표시되며, 용의자별 최근 대화 일부를 문맥으로 사용합니다. API가 설정되지 않았거나 호출에 실패해도 기존 선택지형 수사는 계속할 수 있습니다.
+사용 모델 기본값은 `gemini-3.8-flash`이며, `GEMINI_MODEL` 환경 변수로 변경할 수 있습니다. 질문은 500자까지 입력할 수 있습니다. 응답은 스트리밍으로 표시되며, 용의자별 최근 대화 일부를 문맥으로 사용합니다. API가 설정되지 않았거나 호출에 실패해도 기존 선택지형 수사는 계속할 수 있습니다.
 
 ### API 키 설정
 
@@ -53,15 +53,17 @@ Google AI Studio에서 발급한 API 키를 프로젝트 루트의 `.env` 파일
 
 ```dotenv
 GEMINI_API_KEY=발급받은_API_키
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
 모델 변경이 필요 없다면 `GEMINI_MODEL` 줄은 생략할 수 있습니다. `.env` 대신 PowerShell 환경 변수로 설정해도 됩니다.
 
 ```powershell
 $env:GEMINI_API_KEY = "발급받은_API_키"
-$env:GEMINI_MODEL = "gemini-2.5-flash"
+$env:GEMINI_MODEL = "gemini-3.8-flash"
 uv run python main.py
 ```
+
+HTTP 402 오류가 발생하면 Google AI Studio에서 해당 프로젝트의 선불 크레딧과 결제 상태를 확인하세요. HTTP 404는 지정한 모델을 사용할 수 없는 경우입니다.
 
 키를 `main.py`, `game_data.py`, README 또는 Git 저장소에 직접 작성하거나 커밋하지 마세요. API에는 선택한 용의자의 공개 프로필, 현재 확보된 단서, 최근 자유 대화만 전달합니다. 정답과 미획득 단서 등 비공개 사건 데이터는 요청에 포함하지 않습니다. 자세한 설계는 `api-plan.md`를 참고하세요.
