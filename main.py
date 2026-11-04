@@ -6,10 +6,14 @@
 """
 
 import time
-from game_data import GAME_TITLE, INTRO_BRIEFING, SCENE_SPOTS, SUSPECTS, COLLABORATORS, REPORT_DATA, EPILOGUE_TEXT, DEDUCTIONS
+from game_data import (
+    GAME_TITLE, INTRO_BRIEFING, SCENE_SPOTS, SUSPECTS, SUSPECT_DIALOGUE_PROFILES,
+    COLLABORATORS, REPORT_DATA, EPILOGUE_TEXT, DEDUCTIONS
+)
 from game_system import (
     GameState, clear_screen, draw_header, draw_divider,
-    print_slow, select_option, CYAN, YELLOW, GREEN, RED, WHITE, BOLD, RESET
+    print_slow, select_option, stream_gemini_reply, GeminiDialogueError,
+    CYAN, YELLOW, GREEN, RED, WHITE, BOLD, RESET
 )
 
 def show_intro():
@@ -53,6 +57,55 @@ def show_interrogation_log(suspect, entries, animate_last=False):
             print(f"{prefix}{text}")
     draw_divider()
 
+def free_interrogate(state, sid, suspect):
+    clear_screen()
+    draw_header(f"자유 심문 ─ {suspect['name']}")
+    try:
+        question = input(" 질문을 입력하세요 (최대 500자, Enter로 취소) >> ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+    if not question:
+        return
+    if len(question) > 500:
+        print(f"\n {RED}질문은 500자 이내로 입력해 주세요.{RESET}")
+        input(f"\n{CYAN}[Enter 키를 누르면 심문실로 돌아갑니다...]{RESET}")
+        return
+
+    print(f"\n {CYAN}[수사관]{RESET} {question}")
+    print(f" {YELLOW}[{suspect['name']} / Gemini 대화]{RESET} ", end="", flush=True)
+    chunks = []
+    try:
+        for chunk in stream_gemini_reply(
+            SUSPECT_DIALOGUE_PROFILES[sid],
+            list(state.clues.values()),
+            state.api_dialogue_history[sid],
+            question,
+        ):
+            print(chunk, end="", flush=True)
+            chunks.append(chunk)
+    except GeminiDialogueError as exc:
+        print(f"\n\n {RED}[API 대화 실패: {exc}]{RESET}")
+        print(" 기존 질문 선택지와 증거 추궁은 계속 이용할 수 있습니다.")
+        input(f"\n{CYAN}[Enter 키를 누르면 심문실로 돌아갑니다...]{RESET}")
+        return
+
+    answer = "".join(chunks).strip()
+    if not answer:
+        print(f"\n\n {RED}[API가 답변을 반환하지 않았습니다. 다시 시도해 주세요.]{RESET}")
+        input(f"\n{CYAN}[Enter 키를 누르면 심문실로 돌아갑니다...]{RESET}")
+        return
+
+    state.dialogue_logs[sid].append(("수사관", "자유 질문", question))
+    state.dialogue_logs[sid].append((suspect["name"], "Gemini 대화", answer))
+    history = state.api_dialogue_history[sid]
+    history.extend([
+        {"role": "user", "parts": [{"text": question}]},
+        {"role": "model", "parts": [{"text": answer}]},
+    ])
+    del history[:-12]
+    draw_divider()
+    input(f"\n{CYAN}[Enter 키를 누르면 심문실로 돌아갑니다...]{RESET}")
+
 def interrogate_suspect(state, sid):
     suspect = SUSPECTS[sid]
     dialogue_log = state.dialogue_logs[sid]
@@ -74,7 +127,11 @@ def interrogate_suspect(state, sid):
             opts.append(f"{YELLOW}[모순추궁] 모순 추궁하기 (수집 단서 제시){RESET}")
         else:
             opts.append(f"{RED}[추궁불가] 결정적 반박 단서 미확보{RESET}")
+        free_dialogue_index = len(opts)
+        opts.append("[자유 대화] 직접 질문하기 (Gemini API)")
+        confront_index = len(opts)
         opts.append("[대화 로그] 지금까지의 문답 다시 보기")
+        log_index = len(opts) - 1
 
         sel = select_option(f"심문실 ─ {suspect['name']} ({suspect['role']}) {status}", opts, subtitle=f"주장: \"{suspect['alibi']}\"")
         if sel == -1: break
@@ -90,7 +147,9 @@ def interrogate_suspect(state, sid):
                 dialogue_log.append((suspect["name"], reaction, answer))
                 show_interrogation_log(suspect, dialogue_log, animate_last=True)
                 input(f"\n{CYAN}[Enter 키를 누르면 목록으로 돌아갑니다...]{RESET}")
-        elif sel == len(q_indices):
+        elif sel == free_dialogue_index:
+            free_interrogate(state, sid, suspect)
+        elif sel == confront_index:
             if sid in state.broken_suspects: continue
             if not confront_ready:
                 clear_screen()
@@ -116,7 +175,7 @@ def interrogate_suspect(state, sid):
                     dialogue_log.append((suspect["name"], "불쾌", "그게 제 알리바이와 무슨 상관이죠? 억지 부리지 마십시오."))
                     show_interrogation_log(suspect, dialogue_log, animate_last=True)
                 input(f"\n{CYAN}[Enter 키를 누르면 심문실로 돌아갑니다...]{RESET}")
-        elif sel == len(q_indices) + 1:
+        elif sel == log_index:
             if dialogue_log:
                 show_interrogation_log(suspect, dialogue_log)
             else:
